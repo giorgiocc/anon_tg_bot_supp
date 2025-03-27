@@ -8,7 +8,6 @@ from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQu
 from pymongo import MongoClient
 from dotenv import load_dotenv
 from bson import ObjectId
-import certifi
 
 load_dotenv()
 
@@ -21,12 +20,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
-mongo_client = MongoClient(
-    MONGO_DB,
-    tls=True,
-    tlsCAFile=certifi.where() 
-)
+mongo_client = MongoClient(MONGO_DB)
 
 db = mongo_client.get_default_database("support")  
 tickets_collection = db.tickets 
@@ -82,7 +76,6 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         logger.error(f"❌ Failed to send message to admin ({ADMIN_ID}): {e}")
 
     await update.message.reply_text("Your message has been sent to the admin. You will receive a response shortly.")
-
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Callback for the admin button to mark ticket as read."""
@@ -157,12 +150,10 @@ bot_app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_use
 bot_app.add_handler(CallbackQueryHandler(button_callback))
 bot_app.add_handler(CommandHandler("reply", reply_command))
 
-
 @app.route('/')
 def index():
     """Minimal Flask endpoint that returns 'hello'."""
     return 'hello'
-
 
 def main():
     flask_thread = threading.Thread(
