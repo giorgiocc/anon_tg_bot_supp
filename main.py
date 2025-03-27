@@ -8,6 +8,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQu
 from pymongo import MongoClient
 from dotenv import load_dotenv
 from bson import ObjectId
+import certifi
 
 # Load environment variables
 load_dotenv()
@@ -23,7 +24,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Connect to MongoDB
-mongo_client = MongoClient(MONGO_DB)
+mongo_client = MongoClient(MONGO_DB, tls=True, tlsCAFile=certifi.where())
 db = mongo_client.get_default_database("support")  # Adjust if you need a specific DB name
 tickets_collection = db.tickets  # Collection for tickets
 
