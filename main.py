@@ -21,7 +21,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-mongo_client = MongoClient(MONGO_DB, tls=True, tlsAllowInvalidCertificates=True)
+
+mongo_client = MongoClient(
+    MONGO_DB,
+    tls=True,
+    tlsCAFile=certifi.where() 
+)
+
 db = mongo_client.get_default_database("support")  
 tickets_collection = db.tickets 
 
