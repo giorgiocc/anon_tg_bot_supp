@@ -44,10 +44,13 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text("Admin message received. Use /reply to respond to a ticket.")
         return
 
+    # Get username or fallback to full name
+    username = user.username if user.username else f"{user.first_name or ''} {user.last_name or ''}".strip()
+
     ticket = {
         "user_id": user.id,
         "user_chat_id": chat_id,
-        "username": user.username,
+        "username": username,
         "message": text,
         "status": "new"
     }
@@ -61,12 +64,16 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     admin_message = (
-        f"New ticket from {user.first_name} (@{user.username}):\n\n"
-        f"{text}\n\nTicket ID: {ticket_id}"
+        f"📩 *New Message from User*\n"
+        f"👤 *User:* {user.first_name} (@{username})\n"
+        f"🆔 *UID:* `{user.id}`\n\n"
+        f"💬 *Message:*\n{text}\n\n"
+        f"📝 *Ticket ID:* `{ticket_id}`"
     )
-    await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message, reply_markup=reply_markup)
+    await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message, reply_markup=reply_markup, parse_mode="Markdown")
 
-    await update.message.reply_text("Your ticket has been created. Our admin will review it shortly.")
+    await update.message.reply_text("Your message has been sent to the admin. You will receive a response shortly.")
+
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Callback for the admin button to mark ticket as read."""
