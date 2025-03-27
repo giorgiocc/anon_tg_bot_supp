@@ -35,12 +35,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("მოგესალმებით! რით შეგვიძლია დაგეხმაროთ? გთხოვთ მოიწერეთ სრული ტექსტი.")
 
 async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle user messages by creating a ticket and notifying the admin."""
     user = update.message.from_user
     chat_id = update.message.chat_id
     text = update.message.text
-
-    logger.info(f"Received message from {user.id} ({user.username}): {text}")
 
     if user.id == ADMIN_ID:
         await update.message.reply_text("Admin message received. Use /reply to respond to a ticket.")
@@ -74,9 +71,9 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     try:
         await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message, reply_markup=reply_markup, parse_mode="Markdown")
-        logger.info(f"Sent message to admin ({ADMIN_ID}).")
+        logger.info(f"✅ Sent message to admin ({ADMIN_ID}) from {user.id}.")
     except Exception as e:
-        logger.error(f"Failed to send message to admin: {e}")
+        logger.error(f"❌ Failed to send message to admin ({ADMIN_ID}): {e}")
 
     await update.message.reply_text("Your message has been sent to the admin. You will receive a response shortly.")
 
@@ -105,7 +102,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text="Your ticket has been read and is being processed."
             )
         await query.edit_message_text(text="Ticket marked as read.")
-        
+
 async def test_admin_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await context.bot.send_message(chat_id=ADMIN_ID, text="🔧 Admin test message.")
