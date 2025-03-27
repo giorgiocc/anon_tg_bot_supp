@@ -40,11 +40,12 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     chat_id = update.message.chat_id
     text = update.message.text
 
+    logger.info(f"Received message from {user.id} ({user.username}): {text}")
+
     if user.id == ADMIN_ID:
         await update.message.reply_text("Admin message received. Use /reply to respond to a ticket.")
         return
 
-    # Get username or fallback to full name
     username = user.username if user.username else f"{user.first_name or ''} {user.last_name or ''}".strip()
 
     ticket = {
@@ -70,7 +71,12 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         f"💬 *Message:*\n{text}\n\n"
         f"📝 *Ticket ID:* `{ticket_id}`"
     )
-    await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message, reply_markup=reply_markup, parse_mode="Markdown")
+
+    try:
+        await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message, reply_markup=reply_markup, parse_mode="Markdown")
+        logger.info(f"Sent message to admin ({ADMIN_ID}).")
+    except Exception as e:
+        logger.error(f"Failed to send message to admin: {e}")
 
     await update.message.reply_text("Your message has been sent to the admin. You will receive a response shortly.")
 
