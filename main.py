@@ -105,6 +105,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text="Your ticket has been read and is being processed."
             )
         await query.edit_message_text(text="Ticket marked as read.")
+        
+async def test_admin_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        await context.bot.send_message(chat_id=ADMIN_ID, text="🔧 Admin test message.")
+        logger.info(f"Successfully sent test message to ADMIN_ID ({ADMIN_ID}).")
+    except Exception as e:
+        logger.error(f"Failed to send test message to admin: {e}")
+
+bot_app.add_handler(CommandHandler("testadmin", test_admin_message))
 
 async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
