@@ -21,17 +21,16 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 mongo_client = MongoClient(MONGO_DB)
-
-db = mongo_client.get_default_database("support")  
-tickets_collection = db.tickets 
+db = mongo_client.get_default_database("support")
+tickets_collection = db.tickets
 
 app = Flask(__name__)
-
 bot_app = Application.builder().token(BOT_TOKEN).build()
 
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Welcome message when user sends /start."""
+    if update.message.from_user.id == ADMIN_ID:
+        if 'reply_ticket_id' in context.user_data:
+            del context.user_data['reply_ticket_id']
     await update.message.reply_text("მოგესალმებით! რით შეგვიძლია დაგეხმაროთ? გთხოვთ მოიწერეთ სრული ტექსტი.")
 
 async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -40,7 +39,9 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     text = update.message.text
 
     if user.id == ADMIN_ID:
-        await update.message.reply_text("Admin message received. Use /reply to respond to a ticket.")
+        if 'reply_ticket_id' in context.user_data:
+            return
+        await update.message.reply_text("Use the Reply button to respond to tickets.")
         return
 
     username = user.username if user.username else f"{user.first_name or ''} {user.last_name or ''}".strip()
@@ -57,7 +58,8 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
 
     keyboard = [
-        [InlineKeyboardButton("Mark as Read", callback_data=f"read_ticket|{ticket_id}")]
+        [InlineKeyboardButton("Mark as Read", callback_data=f"read_ticket|{ticket_id}")],
+        [InlineKeyboardButton("Reply", callback_data=f"reply_ticket|{ticket_id}")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -78,7 +80,6 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     await update.message.reply_text("Your message has been sent to the admin. You will receive a response shortly.")
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Callback for the admin button to mark ticket as read."""
     query = update.callback_query
     await query.answer()
 
@@ -101,25 +102,51 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text="Your ticket has been read and is being processed."
             )
         await query.edit_message_text(text="Ticket marked as read.")
+    elif data.startswith("reply_ticket"):
+        _, ticket_id = data.split("|")
+        context.user_data['reply_ticket_id'] = ticket_id
+        await query.message.reply_text("Please enter your reply for this ticket:")
+
+async def handle_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.message.from_user
+    if user.id != ADMIN_ID:
+        return
+
+    ticket_id = context.user_data.get('reply_ticket_id')
+    if not ticket_id:
+        return
+
+    ticket = await asyncio.to_thread(
+        lambda: tickets_collection.find_one({"_id": ObjectId(ticket_id)})
+    )
+    if not ticket:
+        await update.message.reply_text("Ticket not found.")
+        del context.user_data['reply_ticket_id']
+        return
+
+    user_chat_id = ticket["user_chat_id"]
+    reply_text = update.message.text
+    await context.bot.send_message(chat_id=user_chat_id, text=f"Admin reply: {reply_text}")
+    await update.message.reply_text("Your reply has been sent to the user.")
+    del context.user_data['reply_ticket_id']
 
 async def test_admin_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if 'reply_ticket_id' in context.user_data:
+        del context.user_data['reply_ticket_id']
     try:
         await context.bot.send_message(chat_id=ADMIN_ID, text="🔧 Admin test message.")
         logger.info(f"Successfully sent test message to ADMIN_ID ({ADMIN_ID}).")
     except Exception as e:
         logger.error(f"Failed to send test message to admin: {e}")
 
-bot_app.add_handler(CommandHandler("testadmin", test_admin_message))
-
 async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Allows the admin to reply to a ticket.
-    Usage: /reply <ticket_id> <message>
-    """
     user = update.message.from_user
     if user.id != ADMIN_ID:
         await update.message.reply_text("Unauthorized command.")
         return
+
+    if 'reply_ticket_id' in context.user_data:
+        del context.user_data['reply_ticket_id']
 
     args = context.args
     if len(args) < 2:
@@ -149,10 +176,11 @@ bot_app.add_handler(CommandHandler("start", start))
 bot_app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_user_message))
 bot_app.add_handler(CallbackQueryHandler(button_callback))
 bot_app.add_handler(CommandHandler("reply", reply_command))
+bot_app.add_handler(CommandHandler("testadmin", test_admin_message))
+bot_app.add_handler(MessageHandler(filters.Chat(chat_id=ADMIN_ID) & filters.TEXT & (~filters.COMMAND), handle_admin_reply), group=1)
 
 @app.route('/')
 def index():
-    """Minimal Flask endpoint that returns 'hello'."""
     return 'hello'
 
 def main():
@@ -161,7 +189,6 @@ def main():
         daemon=True
     )
     flask_thread.start()
-
     bot_app.run_polling()
 
 if __name__ == '__main__':
