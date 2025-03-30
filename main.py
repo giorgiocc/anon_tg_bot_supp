@@ -77,7 +77,7 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     except Exception as e:
         logger.error(f"❌ Failed to send message to admin ({ADMIN_ID}): {e}")
 
-    await update.message.reply_text("Your message has been sent to the admin. You will receive a response shortly.")
+    await update.message.reply_text("შეტყობინება გაგზავნილია ადმინისტრაციაში, გთოხვ დაელოდო პასუხს!")
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -99,13 +99,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_chat_id = ticket["user_chat_id"]
             await context.bot.send_message(
                 chat_id=user_chat_id,
-                text="Your ticket has been read and is being processed."
+                text="თქვენი მოთხოვნა განიხილა და საკითხი დახურულია!"
             )
-        await query.edit_message_text(text="Ticket marked as read.")
+        await query.edit_message_text(text="ბილეთი დახურულია!")
     elif data.startswith("reply_ticket"):
         _, ticket_id = data.split("|")
         context.user_data['reply_ticket_id'] = ticket_id
-        await query.message.reply_text("Please enter your reply for this ticket:")
+        await query.message.reply_text("შეიყვანე შეტყობინება: ")
 
 async def handle_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
@@ -126,8 +126,8 @@ async def handle_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     user_chat_id = ticket["user_chat_id"]
     reply_text = update.message.text
-    await context.bot.send_message(chat_id=user_chat_id, text=f"Admin reply: {reply_text}")
-    await update.message.reply_text("Your reply has been sent to the user.")
+    await context.bot.send_message(chat_id=user_chat_id, text=f"Admin: {reply_text}")
+    await update.message.reply_text("შეტყობინება გაიგზავნა მომხმარებელთან!")
     del context.user_data['reply_ticket_id']
 
 async def test_admin_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -169,7 +169,7 @@ async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     user_chat_id = ticket["user_chat_id"]
-    await context.bot.send_message(chat_id=user_chat_id, text=f"Admin reply: {reply_text}")
+    await context.bot.send_message(chat_id=user_chat_id, text=f"Admin: {reply_text}")
     await update.message.reply_text("Reply sent to the user.")
 
 bot_app.add_handler(CommandHandler("start", start))
