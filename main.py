@@ -37,7 +37,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     chat_id = update.message.chat_id
-    text = update.message.text
+    text = ""
+    media_type = None
+    file_id = None
+
+    # Check if message is a photo
+    if update.message.photo:
+        media_type = 'photo'
+        file_id = update.message.photo[-1].file_id
+        text = update.message.caption or ""
+    # Check if message is a voice
+    elif update.message.voice:
+        media_type = 'voice'
+        file_id = update.message.voice.file_id
+        text = update.message.caption or ""
+    # Handle text messages
+    else:
+        text = update.message.text
 
     blocked = await asyncio.to_thread(
         lambda: db.blocked_users.find_one({"user_id": user.id})
@@ -59,7 +75,8 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         "user_chat_id": chat_id,
         "username": username,
         "message": text,
-        "status": "new"
+        "status": "new",
+        "media": {"type": media_type, "file_id": file_id} if media_type else None
     }
     ticket_id = await asyncio.to_thread(
         lambda: str(tickets_collection.insert_one(ticket).inserted_id)
@@ -81,7 +98,29 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
 
     try:
-        await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message, reply_markup=reply_markup, parse_mode="Markdown")
+        if media_type == 'photo':
+            await context.bot.send_photo(
+                chat_id=ADMIN_ID,
+                photo=file_id,
+                caption=admin_message,
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+        elif media_type == 'voice':
+            await context.bot.send_voice(
+                chat_id=ADMIN_ID,
+                voice=file_id,
+                caption=admin_message,
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+        else:
+            await context.bot.send_message(
+                chat_id=ADMIN_ID,
+                text=admin_message,
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
         logger.info(f"✅ Sent message to admin ({ADMIN_ID}) from {user.id}.")
     except Exception as e:
         logger.error(f"❌ Failed to send message to admin ({ADMIN_ID}): {e}")
@@ -146,8 +185,27 @@ async def handle_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
 
     user_chat_id = ticket["user_chat_id"]
-    reply_text = update.message.text
-    await context.bot.send_message(chat_id=user_chat_id, text=f"Admin: {reply_text}")
+
+    if update.message.text:
+        reply_text = update.message.text
+        await context.bot.send_message(chat_id=user_chat_id, text=f"Admin: {reply_text}")
+    elif update.message.photo:
+        photo = update.message.photo[-1].file_id
+        caption = update.message.caption or ""
+        await context.bot.send_photo(
+            chat_id=user_chat_id,
+            photo=photo,
+            caption=f"Admin: {caption}"
+        )
+    elif update.message.voice:
+        voice = update.message.voice.file_id
+        caption = update.message.caption or ""
+        await context.bot.send_voice(
+            chat_id=user_chat_id,
+            voice=voice,
+            caption=f"Admin: {caption}"
+        )
+
     await update.message.reply_text("შეტყობინება გაიგზავნა მომხმარებელთან!")
     del context.user_data['reply_ticket_id']
 
@@ -194,11 +252,17 @@ async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Reply sent to the user.")
 
 bot_app.add_handler(CommandHandler("start", start))
-bot_app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_user_message))
+bot_app.add_handler(MessageHandler(
+    (filters.TEXT | filters.PHOTO | filters.VOICE) & (~filters.COMMAND),
+    handle_user_message
+))
 bot_app.add_handler(CallbackQueryHandler(button_callback))
 bot_app.add_handler(CommandHandler("reply", reply_command))
 bot_app.add_handler(CommandHandler("testadmin", test_admin_message))
-bot_app.add_handler(MessageHandler(filters.Chat(chat_id=ADMIN_ID) & filters.TEXT & (~filters.COMMAND), handle_admin_reply), group=1)
+bot_app.add_handler(MessageHandler(
+    filters.Chat(chat_id=ADMIN_ID) & (filters.TEXT | filters.PHOTO | filters.VOICE) & (~filters.COMMAND),
+    handle_admin_reply
+), group=1)
 
 @app.route('/')
 def index():
