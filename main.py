@@ -1,3 +1,4 @@
+from datetime import datetime
 import os
 import logging
 import threading
@@ -38,6 +39,13 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     chat_id = update.message.chat_id
     text = update.message.text
 
+    blocked = await asyncio.to_thread(
+        lambda: db.blocked_users.find_one({"user_id": user.id})
+    )
+    if blocked:
+        await update.message.reply_text("თქვენ დაბლოკილი ხართ და აღარ შეგიძლიათ შეტყობინებების გაგზავნა")
+        return
+
     if user.id == ADMIN_ID:
         if 'reply_ticket_id' in context.user_data:
             return
@@ -59,7 +67,8 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     keyboard = [
         [InlineKeyboardButton("Mark as Read", callback_data=f"read_ticket|{ticket_id}")],
-        [InlineKeyboardButton("Reply", callback_data=f"reply_ticket|{ticket_id}")]
+        [InlineKeyboardButton("Reply", callback_data=f"reply_ticket|{ticket_id}")],
+        [InlineKeyboardButton("Block User", callback_data=f"block_user|{user.id}")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -106,6 +115,18 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         _, ticket_id = data.split("|")
         context.user_data['reply_ticket_id'] = ticket_id
         await query.message.reply_text("შეიყვანე შეტყობინება: ")
+
+    elif data.startswith("block_user"):
+        _, user_id = data.split("|")
+        user_id = int(user_id)
+        blocked_user = {
+            "user_id": user_id,
+            "blocked_at": datetime.datetime.utcnow()
+        }
+        await asyncio.to_thread(
+            lambda: db.blocked_users.insert_one(blocked_user)
+        )
+        await query.edit_message_text(text=f"User {user_id} has been blocked.")
 
 async def handle_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
