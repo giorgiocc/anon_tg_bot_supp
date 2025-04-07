@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 import logging
 import threading
@@ -121,7 +121,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = int(user_id)
         blocked_user = {
             "user_id": user_id,
-            "blocked_at": datetime.datetime.utcnow()
+            "blocked_at": datetime.now(timezone.utc)
         }
         await asyncio.to_thread(
             lambda: db.blocked_users.insert_one(blocked_user)
