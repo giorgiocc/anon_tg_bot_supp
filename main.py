@@ -46,10 +46,15 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         media_type = 'photo'
         file_id = update.message.photo[-1].file_id
         text = update.message.caption or ""
-    # Check if message is a voice
+    # Check if message is a voice message
     elif update.message.voice:
         media_type = 'voice'
         file_id = update.message.voice.file_id
+        text = update.message.caption or ""
+    # Check if message is a video
+    elif update.message.video:
+        media_type = 'video'
+        file_id = update.message.video.file_id
         text = update.message.caption or ""
     # Handle text messages
     else:
@@ -110,6 +115,14 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
             await context.bot.send_voice(
                 chat_id=ADMIN_ID,
                 voice=file_id,
+                caption=admin_message,
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+        elif media_type == 'video':
+            await context.bot.send_video(
+                chat_id=ADMIN_ID,
+                video=file_id,
                 caption=admin_message,
                 reply_markup=reply_markup,
                 parse_mode="Markdown"
@@ -205,6 +218,14 @@ async def handle_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE)
             voice=voice,
             caption=f"Admin: {caption}"
         )
+    elif update.message.video:
+        video = update.message.video.file_id
+        caption = update.message.caption or ""
+        await context.bot.send_video(
+            chat_id=user_chat_id,
+            video=video,
+            caption=f"Admin: {caption}"
+        )
 
     await update.message.reply_text("შეტყობინება გაიგზავნა მომხმარებელთან!")
     del context.user_data['reply_ticket_id']
@@ -253,14 +274,14 @@ async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 bot_app.add_handler(CommandHandler("start", start))
 bot_app.add_handler(MessageHandler(
-    (filters.TEXT | filters.PHOTO | filters.VOICE) & (~filters.COMMAND),
+    (filters.TEXT | filters.PHOTO | filters.VOICE | filters.VIDEO) & (~filters.COMMAND),
     handle_user_message
 ))
 bot_app.add_handler(CallbackQueryHandler(button_callback))
 bot_app.add_handler(CommandHandler("reply", reply_command))
 bot_app.add_handler(CommandHandler("testadmin", test_admin_message))
 bot_app.add_handler(MessageHandler(
-    filters.Chat(chat_id=ADMIN_ID) & (filters.TEXT | filters.PHOTO | filters.VOICE) & (~filters.COMMAND),
+    filters.Chat(chat_id=ADMIN_ID) & (filters.TEXT | filters.PHOTO | filters.VOICE | filters.VIDEO) & (~filters.COMMAND),
     handle_admin_reply
 ), group=1)
 
