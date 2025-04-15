@@ -88,7 +88,6 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         lambda: str(tickets_collection.insert_one(ticket).inserted_id)
     )
 
-    # Modified keyboard with Check User button
     keyboard = [
         [InlineKeyboardButton("Mark as Read", callback_data=f"read_ticket|{ticket_id}")],
         [InlineKeyboardButton("Reply", callback_data=f"reply_ticket|{ticket_id}")],
