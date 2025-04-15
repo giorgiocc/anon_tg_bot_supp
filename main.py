@@ -9,12 +9,14 @@ from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQu
 from pymongo import MongoClient
 from dotenv import load_dotenv
 from bson import ObjectId
+from dateutil import parser  
 
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
 MONGO_DB = os.getenv("MONGO_DB")
+MONGO_CHECK_URI = os.getenv("MONGO_CHECK_URI") 
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
@@ -24,6 +26,9 @@ logger = logging.getLogger(__name__)
 mongo_client = MongoClient(MONGO_DB)
 db = mongo_client.get_default_database("support")
 tickets_collection = db.tickets
+
+mongo_check_client = MongoClient(MONGO_CHECK_URI)
+check_db = mongo_check_client.GeorgiaChatbot  
 
 app = Flask(__name__)
 bot_app = Application.builder().token(BOT_TOKEN).build()
@@ -41,22 +46,18 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     media_type = None
     file_id = None
 
-    # Check if message is a photo
     if update.message.photo:
         media_type = 'photo'
         file_id = update.message.photo[-1].file_id
         text = update.message.caption or ""
-    # Check if message is a voice message
     elif update.message.voice:
         media_type = 'voice'
         file_id = update.message.voice.file_id
         text = update.message.caption or ""
-    # Check if message is a video
     elif update.message.video:
         media_type = 'video'
         file_id = update.message.video.file_id
         text = update.message.caption or ""
-    # Handle text messages
     else:
         text = update.message.text
 
@@ -87,10 +88,14 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         lambda: str(tickets_collection.insert_one(ticket).inserted_id)
     )
 
+    # Modified keyboard with Check User button
     keyboard = [
         [InlineKeyboardButton("Mark as Read", callback_data=f"read_ticket|{ticket_id}")],
         [InlineKeyboardButton("Reply", callback_data=f"reply_ticket|{ticket_id}")],
-        [InlineKeyboardButton("Block User", callback_data=f"block_user|{user.id}")]
+        [
+            InlineKeyboardButton("Block User", callback_data=f"block_user|{user.id}"),
+            InlineKeyboardButton("Check User", callback_data=f"check_user|{user.id}")
+        ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -179,6 +184,53 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             lambda: db.blocked_users.insert_one(blocked_user)
         )
         await query.edit_message_text(text=f"User {user_id} has been blocked.")
+
+    elif data.startswith("check_user"):
+        _, user_id = data.split("|")
+        user_id = int(user_id)
+        
+        user = await asyncio.to_thread(
+            lambda: check_db.users.find_one({"_id": user_id})
+        )
+        
+        if not user:
+            await query.message.reply_text(f"User {user_id} not found in check database.")
+            return
+
+        current_time = datetime.now(timezone.utc)
+        premium_until = user.get("premium_until")
+        if isinstance(premium_until, str):
+            premium_until = parser.parse(premium_until)
+        if premium_until and premium_until.tzinfo is None:
+            premium_until = premium_until.replace(tzinfo=timezone.utc)
+        is_premium = user.get("premium", False) and premium_until and premium_until > current_time
+        
+        ban_until = user.get("ban_until")
+        is_banned = False
+        if ban_until:
+            if isinstance(ban_until, str):
+                ban_until = parser.parse(ban_until)
+            if ban_until.tzinfo is None:
+                ban_until = ban_until.replace(tzinfo=timezone.utc)
+            is_banned = ban_until > current_time
+        
+        message = (
+            f"🔍 *User Check Results*\n"
+            f"🆔 User ID: `{user_id}`\n"
+            f"👤 Username: @{user.get('username', 'N/A')}\n"
+            f"⚧ Gender: {user.get('gender', 'Not set')}\n"
+            f"💎 Premium: {'Yes' if is_premium else 'No'}\n"
+            f"🚫 Banned: {'Yes' if is_banned else 'No'}\n"
+            f"📅 Last Active: {user.get('last_active', 'N/A')}\n"
+            f"🔨 Ban Count: {len(user.get('ban_history', []))}\n"
+            f"📝 Auto Delete: {'Enabled' if user.get('auto_delete', True) else 'Disabled'}"
+        )
+        
+        await context.bot.send_message(
+            chat_id=ADMIN_ID,
+            text=message,
+            parse_mode="Markdown"
+        )
 
 async def handle_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
