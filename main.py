@@ -5,6 +5,7 @@ import threading
 import asyncio
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.error import Forbidden  
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from pymongo import MongoClient
 from dotenv import load_dotenv
@@ -142,7 +143,7 @@ async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     except Exception as e:
         logger.error(f"❌ Failed to send message to admin ({ADMIN_ID}): {e}")
 
-    await update.message.reply_text("შეტყობინება გაგზავნილია ადმინისტრაციაში, გთოხვ დაელოდო პასუხს!")
+    await update.message.reply_text("შეტყობინება გაგზავნილია ადმინისტრაციაში, გთოჩნ დაელოდო პასუხს!")
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -249,37 +250,59 @@ async def handle_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
 
     user_chat_id = ticket["user_chat_id"]
+    sent = False  # Track if message was sent successfully
 
-    if update.message.text:
-        reply_text = update.message.text
-        await context.bot.send_message(chat_id=user_chat_id, text=f"Admin: {reply_text}")
-    elif update.message.photo:
-        photo = update.message.photo[-1].file_id
-        caption = update.message.caption or ""
-        await context.bot.send_photo(
-            chat_id=user_chat_id,
-            photo=photo,
-            caption=f"Admin: {caption}"
+    try:
+        if update.message.text:
+            reply_text = update.message.text
+            await context.bot.send_message(chat_id=user_chat_id, text=f"Admin: {reply_text}")
+            sent = True
+        elif update.message.photo:
+            photo = update.message.photo[-1].file_id
+            caption = update.message.caption or ""
+            await context.bot.send_photo(
+                chat_id=user_chat_id,
+                photo=photo,
+                caption=f"Admin: {caption}"
+            )
+            sent = True
+        elif update.message.voice:
+            voice = update.message.voice.file_id
+            caption = update.message.caption or ""
+            await context.bot.send_voice(
+                chat_id=user_chat_id,
+                voice=voice,
+                caption=f"Admin: {caption}"
+            )
+            sent = True
+        elif update.message.video:
+            video = update.message.video.file_id
+            caption = update.message.caption or ""
+            await context.bot.send_video(
+                chat_id=user_chat_id,
+                video=video,
+                caption=f"Admin: {caption}"
+            )
+            sent = True
+    except Forbidden as e:
+        logger.error(f"User {user_chat_id} blocked the bot: {e}")
+        await update.message.reply_text("❌ შეტყობინების გაგზავნა ვერ მოხერხდა: მომხმარებელმა ბოტი დაბლოკა.")
+        # Add user to blocked list
+        await asyncio.to_thread(
+            lambda: db.blocked_users.insert_one({
+                "user_id": user_chat_id,
+                "blocked_at": datetime.now(timezone.utc)
+            })
         )
-    elif update.message.voice:
-        voice = update.message.voice.file_id
-        caption = update.message.caption or ""
-        await context.bot.send_voice(
-            chat_id=user_chat_id,
-            voice=voice,
-            caption=f"Admin: {caption}"
-        )
-    elif update.message.video:
-        video = update.message.video.file_id
-        caption = update.message.caption or ""
-        await context.bot.send_video(
-            chat_id=user_chat_id,
-            video=video,
-            caption=f"Admin: {caption}"
-        )
-
-    await update.message.reply_text("შეტყობინება გაიგზავნა მომხმარებელთან!")
-    del context.user_data['reply_ticket_id']
+    except Exception as e:
+        logger.error(f"Error sending message to user {user_chat_id}: {e}")
+        await update.message.reply_text(f"❌ შეტყობინების გაგზავნა ვერ მოხერხდა: {e}")
+    else:
+        if sent:
+            await update.message.reply_text("შეტყობინება გაიგზავნა მომხმარებელთან!")
+    finally:
+        if 'reply_ticket_id' in context.user_data:
+            del context.user_data['reply_ticket_id']
 
 async def test_admin_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if 'reply_ticket_id' in context.user_data:
@@ -320,7 +343,21 @@ async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     user_chat_id = ticket["user_chat_id"]
-    await context.bot.send_message(chat_id=user_chat_id, text=f"Admin: {reply_text}")
+    try:
+        await context.bot.send_message(chat_id=user_chat_id, text=f"Admin: {reply_text}")
+    except Forbidden as e:
+        await update.message.reply_text("❌ Cannot send reply: user has blocked the bot.")
+        await asyncio.to_thread(
+            lambda: db.blocked_users.insert_one({
+                "user_id": user_chat_id,
+                "blocked_at": datetime.now(timezone.utc)
+            })
+        )
+        return
+    except Exception as e:
+        await update.message.reply_text(f"Error sending message: {e}")
+        return
+
     await update.message.reply_text("Reply sent to the user.")
 
 bot_app.add_handler(CommandHandler("start", start))
