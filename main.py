@@ -173,6 +173,31 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['reply_ticket_id'] = ticket_id
         await query.message.reply_text("შეიყვანე შეტყობინება: ")
 
+    elif data.startswith("unban_user"):
+        _, user_id = data.split("|")
+        user_id = int(user_id)
+        
+        result = await asyncio.to_thread(
+            lambda: check_db.users.update_one(
+                {"_id": user_id},
+                {
+                    "$set": {"ban_until": None},
+                    "$unset": {"ban_reason": ""}
+                }
+            )
+        )
+        
+        if result.modified_count > 0:
+            original_text = query.message.text
+            new_text = original_text.replace("🚫 Banned: Yes", "🚫 Banned: No")
+            new_text += "\n\n✅ User has been unbanned."
+            await query.edit_message_text(
+                text=new_text,
+                parse_mode="Markdown"
+            )
+        else:
+            await query.answer("❌ No changes made - user might not exist or wasn't banned")
+
     elif data.startswith("block_user"):
         _, user_id = data.split("|")
         user_id = int(user_id)
@@ -214,13 +239,16 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ban_until = ban_until.replace(tzinfo=timezone.utc)
             is_banned = ban_until > current_time
         
+        blocked_bot = user.get("blocked_bot", False)
+        
         message = (
             f"🔍 *User Check Results*\n"
             f"🆔 User ID: `{user_id}`\n"
             f"👤 Username: @{user.get('username', 'N/A')}\n"
             f"⚧ Gender: {user.get('gender', 'Not set')}\n"
-            f"💎 Premium: {'Yes' if is_premium else 'No'}\n"
-            f"🚫 Banned: {'Yes' if is_banned else 'No'}\n"
+            f"💎 Premium: {'Yes ✅' if is_premium else 'No ❌'}\n"
+            f"🚫 Banned: {'Yes ❎' if is_banned else 'No ❌'}\n"
+            f"🤖 Blocked Bot: {'Yes ❎' if blocked_bot else 'No ❌'}\n"
             f"📅 Last Active: {user.get('last_active', 'N/A')}\n"
             f"🔨 Ban Count: {len(user.get('ban_history', []))}\n"
             f"📝 Auto Delete: {'Enabled' if user.get('auto_delete', True) else 'Disabled'}"
@@ -231,7 +259,17 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text=message,
             parse_mode="Markdown"
         )
-
+        keyboard = []
+        if is_banned:
+            keyboard.append([InlineKeyboardButton("Unban User", callback_data=f"unban_user|{user_id}")])
+        reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
+        
+        await context.bot.send_message(
+            chat_id=ADMIN_ID,
+            text=message,
+            parse_mode="Markdown",
+            reply_markup=reply_markup
+        )
 async def handle_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     if user.id != ADMIN_ID:
