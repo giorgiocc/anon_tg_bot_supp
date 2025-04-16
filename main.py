@@ -38,7 +38,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.from_user.id == ADMIN_ID:
         if 'reply_ticket_id' in context.user_data:
             del context.user_data['reply_ticket_id']
-    await update.message.reply_text("მოგესალმებით! რით შეგვიძლია დაგეხმაროთ? გთხოვთ მოიწერეთ სრული ტექსტი.")
+    await update.message.reply_text("მოგესალმებით! რით შეგვიძლია დაგეხმაროთ? გთხოვთ მოიწერეთ სრული ტექსტი!\n\nგაითვალისწინეთ ეს ბოტი არის დახმარების ცენტრი, თუ გსურთ ჩვენი ანონიმური ჩათბოტი, გადადით აქ -> @GeorgiaChatBot")
 
 async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
